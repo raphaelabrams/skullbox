@@ -147,21 +147,22 @@ unsigned char const hotBits[1024] = {
     11, 106, 13, 93
 };
 
-
+#define MAX 100
 void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
-	static int acc=400;
+	static int acc=MAX;
 
-	if(TILT){acc=1000;}
-	if(acc){acc-=4;}
-	int cal=1000-acc;
-	cal/=30;
-	cal+=1;
-	fire(0,cal,acc);
-	fire(3,cal,acc);
-	fire(4,cal,acc/2);
-	fire(5,cal,acc/2);
-	fire(6,cal,acc/2);
-	fire(7,cal,acc/2);
+	if(TILT){acc+=20;if(acc>MAX){acc=MAX;}}
+	if(acc>0){acc-=1;}
+
+	int cal=MAX-acc;
+	cal/=12;
+	cal+=10;
+	fire(0,cal,acc*4);
+	fire(3,cal,acc*4);
+	fire(4,cal,acc*2);
+	fire(5,cal,acc*2);
+	fire(6,cal,acc*2);
+	fire(7,cal,acc*2);
 	IFS0bits.T2IF=0;
 	IEC0bits.T2IE=1;
 }
