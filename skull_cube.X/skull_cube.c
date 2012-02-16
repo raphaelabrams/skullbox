@@ -149,15 +149,19 @@ unsigned char const hotBits[1024] = {
 
 
 void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
+	static int acc=400;
 
-	fire(0,6,180);
-	fire(3,6,180);
-
-
-	fire(4,12,10);
-	fire(5,12,10);
-	fire(6,12,10);
-	fire(7,12,10);
+	if(TILT){acc=1000;}
+	if(acc){acc-=4;}
+	int cal=1000-acc;
+	cal/=30;
+	cal+=1;
+	fire(0,cal,acc);
+	fire(3,cal,acc);
+	fire(4,cal,acc/2);
+	fire(5,cal,acc/2);
+	fire(6,cal,acc/2);
+	fire(7,cal,acc/2);
 	IFS0bits.T2IF=0;
 	IEC0bits.T2IE=1;
 }
