@@ -44,8 +44,16 @@ void update_stepper(void);
 void animate_stepper(int speed);
 void step(char direction);
 void fire (char unit, int calmness, int temperature);
+void pastel(char unit);
+void strobe(unsigned char unit, unsigned char intensity, unsigned char decay);
+void moonlight(char unit);
 
-
+#define FIRE 0
+#define PASTEL 1
+#define STROBE 2
+#define MOONLIGHT 3
+#define MODELIMIT 4
+unsigned char mode=0;
 
 typedef struct{
     unsigned char r;
@@ -148,21 +156,46 @@ unsigned char const hotBits[1024] = {
 };
 
 #define MAX 100
+#define MULT 1
+#define DEC 200
 void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
 	static int acc=MAX;
+	mode=STROBE;
 
-	if(TILT){acc+=20;if(acc>MAX){acc=MAX;}}
+	if(TILT){acc+=10;if(acc>MAX){acc=MAX;}}
 	if(acc>0){acc-=1;}
 
 	int cal=MAX-acc;
 	cal/=12;
 	cal+=10;
-	fire(0,cal,acc*4);
-	fire(3,cal,acc*4);
-	fire(4,cal,acc*2);
-	fire(5,cal,acc*2);
-	fire(6,cal,acc*2);
-	fire(7,cal,acc*2);
+	if(mode==FIRE){
+		fire(0,cal,acc*2);
+		fire(3,cal,acc*2);
+		fire(4,cal,acc*2);
+		fire(5,cal,acc*1);
+		fire(6,cal,acc*1);
+		fire(7,cal,acc*1);
+	}
+	if(mode==PASTEL){
+		pastel(0);
+		pastel(1);
+		pastel(2);
+		pastel(3);
+		pastel(4);
+		pastel(5);
+		pastel(6);
+		pastel(7);
+	}
+	if(mode==STROBE){
+		strobe(0,acc*MULT,DEC);
+		strobe(1,acc*MULT,DEC);
+		strobe(2,acc*MULT,DEC);
+		strobe(3,acc*MULT,DEC);
+		strobe(4,acc*MULT,DEC);
+		strobe(5,acc*MULT,DEC);
+		strobe(6,acc*MULT,DEC);
+		strobe(7,acc*MULT,DEC);
+	}
 	IFS0bits.T2IF=0;
 	IEC0bits.T2IE=1;
 }
@@ -262,6 +295,40 @@ void fire (char unit, int calmness, int temperature){
 
 	acc++;
 	acc%=1023;
+}
+void pastel(char unit){
+	static int acc=0;
+	pixel[unit].r=hotBits[acc++];
+	acc%=1023;
+	pixel[unit].g=hotBits[acc++];
+	acc%=1023;
+	pixel[unit].b=hotBits[acc++];
+	acc%=1023;
+}
+void strobe(unsigned char unit, unsigned char intensity, unsigned char decay){
+	static int acc=0;
+
+	int val=(int)(pixel[unit].r); //get previous value. jut red is enough, since we make them all the same later on
+
+
+	if(hotBits[acc]<intensity){
+		val=255;
+	}
+	else{
+		val-=(int)decay;
+		if(val<0){
+			val=0;
+		}
+	}
+	pixel[unit].r=val;
+	pixel[unit].g=val;
+	pixel[unit].b=val;
+	acc++;
+	acc%=1023;
+}
+
+
+void moonlight(char unit){
 }
 
 void update_display(void){
