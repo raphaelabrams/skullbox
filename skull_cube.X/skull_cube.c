@@ -43,6 +43,10 @@ void update_servos(void);
 void update_stepper(void);
 void animate_stepper(int speed);
 void step(char direction);
+void fire (char unit, int calmness, int temperature);
+
+
+
 typedef struct{
     unsigned char r;
     unsigned char g;
@@ -142,17 +146,18 @@ unsigned char const hotBits[1024] = {
     224, 169, 135, 4, 24, 63, 102, 183, 213, 8, 212, 212, 143, 22, 48, 97,
     11, 106, 13, 93
 };
-void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
-	unsigned int sanity=0;
-	static int acc=0;
-	for(char loop=0;loop<8;loop++){
-		pixel[loop].r=hotBits[acc++]/5+100;
-		pixel[loop].g=hotBits[acc++]/15+40;
-		pixel[loop].b=hotBits[acc++]/40;
-	}
 
-		//		acc++;
-		acc%=1023;
+
+void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
+
+	fire(0,6,180);
+	fire(3,6,180);
+
+
+	fire(4,12,10);
+	fire(5,12,10);
+	fire(6,12,10);
+	fire(7,12,10);
 	IFS0bits.T2IF=0;
 	IEC0bits.T2IE=1;
 }
@@ -229,6 +234,29 @@ void step(char direction){
 	STEPPER3=step3[index];
 	STEPPER4=step4[index];
 	index+=direction;
+}
+
+void fire (char unit, int calmness, int temperature){
+	static int acc=0;
+
+	int temp_b=(hotBits[acc]/calmness)+temperature;
+	int temp=0;
+
+	temp=temp_b*2; if(temp>255){temp=255;};
+	pixel[unit].r=(unsigned char)temp;
+
+	temp=temp_b;
+	temp-=87; if(temp<0){temp=0;}
+	temp*=1; if(temp>255){temp=255;};
+	pixel[unit].g=(unsigned char)temp;
+
+	temp=temp_b;
+	temp-=170; if(temp<0){temp=0;}
+	temp*=1; if(temp>255){temp=255;};
+	pixel[unit].b=(unsigned char)temp;
+
+	acc++;
+	acc%=1023;
 }
 
 void update_display(void){
@@ -390,9 +418,9 @@ unsigned int temp=0;
 	IEC0bits.T2IE=1;
 
 	for(unsigned char loop=0;loop<8;loop++){
-		pixel[loop].r=10;
-		pixel[loop].g=10;
-		pixel[loop].b=10;
+		pixel[loop].r=0;
+		pixel[loop].g=0;
+		pixel[loop].b=0;
 	}
 }
 
