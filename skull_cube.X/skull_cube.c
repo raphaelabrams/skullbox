@@ -160,8 +160,8 @@ unsigned char const hotBits[1024] = {
 #define DEC 200
 void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
 	static int acc=MAX;
-	mode=STROBE;
-
+//	mode=PASTEL;
+	static int slower=0;
 	if(TILT){acc+=10;if(acc>MAX){acc=MAX;}}
 	if(acc>0){acc-=1;}
 
@@ -198,6 +198,9 @@ void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
 	}
 	IFS0bits.T2IF=0;
 	IEC0bits.T2IE=1;
+	slower++;
+	slower%=100;
+	if(slower==0){step(1);}
 }
 
 void spiout2(unsigned char datatosend){
@@ -210,12 +213,12 @@ unsigned char temp=0;
 int main(void) {
 	init();
 	while(1){
+		if(BUTTON1==0){mode++;mode%=MODELIMIT;while(BUTTON1==0){;}}
 
-		if(BUTTON1==0){status_report();}
 
 //		merge_displays();
 //		update_servos();
-		animate_stepper(1000);
+//		animate_stepper(1000);
 		update_display();
 		__delay32(40000);
 	}
