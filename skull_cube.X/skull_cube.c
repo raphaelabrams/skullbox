@@ -45,8 +45,11 @@ void animate_stepper(int speed);
 void step(char direction);
 void fire (char unit, int calmness, int temperature);
 void pastel(char unit);
-void strobe(unsigned char unit, unsigned char intensity, unsigned char decay);
-void moonlight(char unit);
+void strobe(unsigned char unit, unsigned char brightness, unsigned char intensity, unsigned char decay);
+void moonlight(char unit, char intensity);
+void charge(void);
+void clear_pixels(void);
+
 
 #define FIRE 0
 #define PASTEL 1
@@ -168,39 +171,58 @@ void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
 	int cal=MAX-acc;
 	cal/=12;
 	cal+=10;
-	if(mode==FIRE){
-		fire(0,cal,acc*2);
-		fire(3,cal,acc*2);
-		fire(4,cal,acc*2);
-		fire(5,cal,acc*1);
-		fire(6,cal,acc*1);
-		fire(7,cal,acc*1);
+
+
+//	while(ZENER==0){
+//		clear_pixels();
+//		pixel[0].b=1;
+//	}
+
+	if(POK_CHG==0){
+		charge();
 	}
-	if(mode==PASTEL){
-		pastel(0);
-		pastel(1);
-		pastel(2);
-		pastel(3);
-		pastel(4);
-		pastel(5);
-		pastel(6);
-		pastel(7);
-	}
-	if(mode==STROBE){
-		strobe(0,acc*MULT,DEC);
-		strobe(1,acc*MULT,DEC);
-		strobe(2,acc*MULT,DEC);
-		strobe(3,acc*MULT,DEC);
-		strobe(4,acc*MULT,DEC);
-		strobe(5,acc*MULT,DEC);
-		strobe(6,acc*MULT,DEC);
-		strobe(7,acc*MULT,DEC);
+	if(POK_CHG==1){
+		if(mode==FIRE){
+			fire(0,cal,acc*2);
+			fire(1,cal,acc*2);
+			fire(2,cal,acc*2);
+		//	moonlight(1,acc*2);
+		//	moonlight(2,acc*2);
+			fire(3,cal,acc*2);
+			fire(4,cal,acc*1);
+			fire(5,cal,acc*1);
+			fire(6,cal,acc*1);
+			fire(7,cal,acc*1);
+		}
+		if(mode==PASTEL){
+			pastel(0);
+			pastel(1);
+			pastel(2);
+			pastel(3);
+			pastel(4);
+			pastel(5);
+			pastel(6);
+			pastel(7);
+		}
+		if(mode==STROBE){
+			strobe(0,0xFF,acc*MULT,DEC);
+			strobe(1,0xFF,acc*MULT,DEC);
+			strobe(2,0xFF,acc*MULT,DEC);
+			strobe(3,0xFF,acc*MULT,DEC);
+			strobe(4,0xFF,acc*MULT,DEC);
+			strobe(5,0xFF,acc*MULT,DEC);
+			strobe(6,0xFF,acc*MULT,DEC);
+			strobe(7,0xFF,acc*MULT,DEC);
+		}
 	}
 	IFS0bits.T2IF=0;
 	IEC0bits.T2IE=1;
-	slower++;
-	slower%=100;
-	if(slower==0){step(1);}
+//	status_report();
+
+
+	//	slower++;
+//	slower%=100;
+//	if(slower==0){step(1);}
 }
 
 void spiout2(unsigned char datatosend){
@@ -212,10 +234,9 @@ unsigned char temp=0;
 
 int main(void) {
 	init();
+	mode=FIRE;
 	while(1){
 		if(BUTTON1==0){mode++;mode%=MODELIMIT;while(BUTTON1==0){;}}
-
-
 //		merge_displays();
 //		update_servos();
 //		animate_stepper(1000);
@@ -308,14 +329,14 @@ void pastel(char unit){
 	pixel[unit].b=hotBits[acc++];
 	acc%=1023;
 }
-void strobe(unsigned char unit, unsigned char intensity, unsigned char decay){
+void strobe(unsigned char unit, unsigned char brightness, unsigned char intensity, unsigned char decay){
 	static int acc=0;
 
 	int val=(int)(pixel[unit].r); //get previous value. jut red is enough, since we make them all the same later on
 
 
 	if(hotBits[acc]<intensity){
-		val=255;
+		val=brightness;
 	}
 	else{
 		val-=(int)decay;
@@ -331,7 +352,51 @@ void strobe(unsigned char unit, unsigned char intensity, unsigned char decay){
 }
 
 
-void moonlight(char unit){
+void moonlight(char unit, char intensity){
+    pixel[unit].r=(unsigned char)((intensity*10)/10);
+    pixel[unit].g=(unsigned char)((intensity*13)/10);
+    pixel[unit].b=(unsigned char)((intensity*25)/10);
+}
+
+void charge(void){
+static int chg=20;
+static int dir=1;
+static int slower=0;
+	slower++;
+	if(slower%3==0){chg+=dir;}
+	if(chg>40){dir=-1;}
+	if(chg<20){dir=1;}
+	pixel[0].r=(unsigned char)((chg*10)/10);
+	pixel[0].g=(unsigned char)((chg*15)/10);
+	pixel[0].b=(unsigned char)((chg*22)/10);
+
+//	pixel[1].r=(unsigned char)((chg*10)/20);
+//	pixel[1].g=(unsigned char)((chg*10)/20);
+//	pixel[1].b=(unsigned char)((chg*15)/20);
+
+	strobe(1,0x30,chg,100);
+	strobe(2,0x30,chg,100);
+
+	//
+//	pixel[2].r=(unsigned char)((chg*10)/20);
+//	pixel[2].g=(unsigned char)((chg*15)/20);
+//	pixel[2].b=(unsigned char)((chg*22)/20);
+
+	pixel[3].r=(unsigned char)((chg*10)/10);
+	pixel[3].g=(unsigned char)((chg*15)/10);
+	pixel[3].b=(unsigned char)((chg*10)/10);
+
+	strobe(4,0x10,chg,100);
+	strobe(5,0x5,chg,10);
+	strobe(6,0x5,chg,10);
+	strobe(7,0x10,chg,100);
+}
+void clear_pixels(void){
+	for(unsigned char loop=0;loop<8;loop++){
+		pixel[loop].r=0;
+		pixel[loop].g=0;
+		pixel[loop].b=0;
+	}
 }
 
 void update_display(void){
@@ -491,11 +556,7 @@ unsigned int temp=0;
 	PR2 = 10000;
 	IFS0bits.T2IF=0;
 	IEC0bits.T2IE=1;
+	clear_pixels();
 
-	for(unsigned char loop=0;loop<8;loop++){
-		pixel[loop].r=0;
-		pixel[loop].g=0;
-		pixel[loop].b=0;
-	}
 }
 
