@@ -3,6 +3,12 @@
 #include "delay.h"
 #include <stdio.h>
 
+#define CENTER0 0
+#define CENTER1 0
+#define CENTER2 0
+#define SERVOCLOCKPERIOD 320
+
+//_FOSCSEL(FNOSC_PRIPLL & IESO_OFF);   //Prim. Osc (XT, HS, EC) w/ PLL, Two speed osc off, Temp protect off
 _FOSCSEL(FNOSC_PRIPLL & IESO_OFF);   //Prim. Osc (XT, HS, EC) w/ PLL, Two speed osc off, Temp protect off
 _FOSC(FCKSM_CSDCMD & OSCIOFNC_OFF & POSCMD_HS); //Clock Switch & Clock Monitor off, Osc 2 clock, High Speed
 
@@ -32,6 +38,10 @@ int __C30_UART=2;
 #define STEPPER3		_LATB11     // 5947
 #define STEPPER4		_LATB10     // 5947
 
+#define SERVO0		_LATA0     //
+#define SERVO1		_LATA1     //
+#define SERVO2		_LATA4     //
+
 
 void send_to_5947(unsigned char iR1, unsigned char iG1, unsigned char iB1,unsigned char iR2, unsigned char iG2, unsigned char iB2);
 void spiout2(unsigned char datatosend);
@@ -46,23 +56,33 @@ void step(char direction);
 void fire (char unit, int calmness, int temperature);
 void pastel(char unit);
 void strobe(unsigned char unit, unsigned char brightness, unsigned char intensity, unsigned char decay);
-void moonlight(char unit, char intensity);
-void charge(void);
+void moonlight(char unit, int intensity);
+void charge(unsigned char blastyness);
 void clear_pixels(void);
 
 
 #define FIRE 0
 #define PASTEL 1
 #define STROBE 2
-#define MOONLIGHT 3
+#define WHITE 3
+#define MOONLIGHT 4
 #define MODELIMIT 4
 unsigned char mode=0;
-
+unsigned char blastyness=0;
 typedef struct{
     unsigned char r;
     unsigned char g;
     unsigned char b;
 } pixelelement;
+
+typedef struct{
+    signed int angle;
+    signed int center;
+    signed int active;
+    signed int realtimer;
+} servo;
+
+servo servos[3];
 
 pixelelement pixel[8];
 
@@ -161,13 +181,16 @@ unsigned char const hotBits[1024] = {
 #define MAX 100
 #define MULT 1
 #define DEC 200
+volatile int debounce=0;
+
 void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
 	static int acc=MAX;
-//	mode=PASTEL;
+	static int nextjumpdelay=0;
+	static int headposition=0;
+	//	mode=PASTEL;
 	static int slower=0;
 	if(TILT){acc+=10;if(acc>MAX){acc=MAX;}}
 	if(acc>0){acc-=1;}
-
 	int cal=MAX-acc;
 	cal/=12;
 	cal+=10;
@@ -179,41 +202,52 @@ void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
 //	}
 
 	if(POK_CHG==0){
-		charge();
+	    charge(0);
 	}
+
 	if(POK_CHG==1){
-		if(mode==FIRE){
-			fire(0,cal,acc*2);
-			fire(1,cal,acc*2);
-			fire(2,cal,acc*2);
-		//	moonlight(1,acc*2);
-		//	moonlight(2,acc*2);
-			fire(3,cal,acc*2);
-			fire(4,cal,acc*1);
-			fire(5,cal,acc*1);
-			fire(6,cal,acc*1);
-			fire(7,cal,acc*1);
+	    if(mode==FIRE){
+		fire(0,cal,acc*2);
+		moonlight(1,100-acc);
+		moonlight(2,100-acc);
+		fire(3,cal,acc*2);
+		fire(4,cal,acc*1);
+		fire(5,cal,acc*1);
+		fire(6,cal,acc*1);
+		fire(7,cal,acc*1);
+	    }
+	    if(mode==PASTEL){
+		pastel(0);
+		pastel(1);
+		pastel(2);
+		pastel(3);
+		pastel(4);
+		pastel(5);
+		pastel(6);
+		pastel(7);
+	    }
+	    if(mode==STROBE){
+		strobe(0,0xFF,acc*MULT,DEC);
+		strobe(1,0xFF,acc*MULT,DEC);
+		strobe(2,0xFF,acc*MULT,DEC);
+		strobe(3,0xFF,acc*MULT,DEC);
+		strobe(4,0xFF,acc*MULT,DEC);
+		strobe(5,0xFF,acc*MULT,DEC);
+		strobe(6,0xFF,acc*MULT,DEC);
+		strobe(7,0xFF,acc*MULT,DEC);
+	    }
+	    if(mode==WHITE){
+		for(int index=0;index<8;index++){
+		    pixel[index].r=(acc*2)+50;
+		    pixel[index].g=(acc*2)+50;
+		    pixel[index].b=(acc*2)+50;
 		}
-		if(mode==PASTEL){
-			pastel(0);
-			pastel(1);
-			pastel(2);
-			pastel(3);
-			pastel(4);
-			pastel(5);
-			pastel(6);
-			pastel(7);
+	    }
+	    if(mode==MOONLIGHT){
+		for(int index=0;index<8;index++){
+		    moonlight(index,(100-acc)/index);
 		}
-		if(mode==STROBE){
-			strobe(0,0xFF,acc*MULT,DEC);
-			strobe(1,0xFF,acc*MULT,DEC);
-			strobe(2,0xFF,acc*MULT,DEC);
-			strobe(3,0xFF,acc*MULT,DEC);
-			strobe(4,0xFF,acc*MULT,DEC);
-			strobe(5,0xFF,acc*MULT,DEC);
-			strobe(6,0xFF,acc*MULT,DEC);
-			strobe(7,0xFF,acc*MULT,DEC);
-		}
+	    }
 	}
 	IFS0bits.T2IF=0;
 	IEC0bits.T2IE=1;
@@ -238,7 +272,7 @@ int main(void) {
 	while(1){
 		if(BUTTON1==0){mode++;mode%=MODELIMIT;while(BUTTON1==0){;}}
 //		merge_displays();
-//		update_servos();
+		update_servos();
 //		animate_stepper(1000);
 		update_display();
 		__delay32(40000);
@@ -330,12 +364,12 @@ void pastel(char unit){
 	acc%=1023;
 }
 void strobe(unsigned char unit, unsigned char brightness, unsigned char intensity, unsigned char decay){
-	static int acc=0;
+	static int acc[8];
 
 	int val=(int)(pixel[unit].r); //get previous value. jut red is enough, since we make them all the same later on
 
 
-	if(hotBits[acc]<intensity){
+	if(hotBits[acc[unit]]<intensity){
 		val=brightness;
 	}
 	else{
@@ -347,49 +381,57 @@ void strobe(unsigned char unit, unsigned char brightness, unsigned char intensit
 	pixel[unit].r=val;
 	pixel[unit].g=val;
 	pixel[unit].b=val;
-	acc++;
-	acc%=1023;
+	acc[unit]++;
+	acc[unit]%=(1023-unit); //a different opinter offset for each lamp.
 }
 
 
-void moonlight(char unit, char intensity){
-    pixel[unit].r=(unsigned char)((intensity*10)/10);
-    pixel[unit].g=(unsigned char)((intensity*13)/10);
-    pixel[unit].b=(unsigned char)((intensity*25)/10);
+void moonlight(char unit, int intensity){
+
+    pixel[unit].r=(unsigned char)((intensity*12)/100);
+    pixel[unit].g=(unsigned char)((intensity*13)/100);
+    pixel[unit].b=(unsigned char)((intensity*15)/100);
 }
 
-void charge(void){
+
+
+
+void charge(unsigned char blastyness){
 static int chg=20;
 static int dir=1;
 static int slower=0;
+static int clipper=0;
 	slower++;
-	if(slower%3==0){chg+=dir;}
+	if(slower%2==0){chg+=dir;}
 	if(chg>40){dir=-1;}
-	if(chg<20){dir=1;}
-	pixel[0].r=(unsigned char)((chg*10)/10);
-	pixel[0].g=(unsigned char)((chg*15)/10);
-	pixel[0].b=(unsigned char)((chg*22)/10);
+	if(chg<1){dir=1;}
+	clipper=chg;
+	clipper-=30;
+	if(clipper<0){clipper=0;}
+	pixel[0].r=(unsigned char)((clipper*10)/10);
+	pixel[0].g=(unsigned char)((clipper*15)/10);
+	pixel[0].b=(unsigned char)((clipper*22)/10);
 
 //	pixel[1].r=(unsigned char)((chg*10)/20);
 //	pixel[1].g=(unsigned char)((chg*10)/20);
 //	pixel[1].b=(unsigned char)((chg*15)/20);
 
-	strobe(1,0x30,chg,100);
-	strobe(2,0x30,chg,100);
+	strobe(1,50,2+blastyness,200);
+	strobe(2,250,1+blastyness,200);
 
 	//
 //	pixel[2].r=(unsigned char)((chg*10)/20);
 //	pixel[2].g=(unsigned char)((chg*15)/20);
 //	pixel[2].b=(unsigned char)((chg*22)/20);
 
-	pixel[3].r=(unsigned char)((chg*10)/10);
-	pixel[3].g=(unsigned char)((chg*15)/10);
-	pixel[3].b=(unsigned char)((chg*10)/10);
+	pixel[3].r=(unsigned char)((clipper*15)/10);
+	pixel[3].g=(unsigned char)((clipper*15)/10);
+	pixel[3].b=(unsigned char)((clipper*10)/10);
 
-	strobe(4,0x10,chg,100);
-	strobe(5,0x5,chg,10);
-	strobe(6,0x5,chg,10);
-	strobe(7,0x10,chg,100);
+	strobe(4,10+blastyness,2+blastyness,200);
+	strobe(5,10+blastyness,2+blastyness,200);
+	strobe(6,10+blastyness,2+blastyness,200);
+	strobe(7,10+blastyness,2+blastyness,200);
 }
 void clear_pixels(void){
 	for(unsigned char loop=0;loop<8;loop++){
@@ -444,6 +486,39 @@ unsigned int temp=0;
 	spiout2((unsigned char)temp);
 }
 
+#define SERVOMULTIPLY 8 //how many microseconds per degree
+#define SERVOMINIMUM 1562   //1ms
+#define SERVOMAXIMUM 3125   //2ms
+#define SERVOOFFSET 781
+
+void update_servos(void){
+    char index=0;
+
+    TMR4=0;   //reset the servo clock
+    
+    //start all servo pulses
+    if(servos[0].active==1){SERVO0=1;}
+    if(servos[1].active==1){SERVO1=1;}
+    if(servos[2].active==1){SERVO2=1;}
+    for(index=0;index<3;index++){
+	int temp=0;
+	temp=servos[index].angle;
+	temp*=SERVOMULTIPLY;
+	temp+=SERVOOFFSET;
+	temp+=servos[index].center;
+	servos[index].realtimer=temp;
+    }
+
+    while(TMR4<SERVOMINIMUM){;}
+
+    while(TMR4<SERVOMAXIMUM){
+        if(servos[0].realtimer<TMR4){SERVO0=0;}
+	if(servos[1].realtimer<TMR4){SERVO1=0;}
+	if(servos[2].realtimer<TMR4){SERVO2=0;}
+    }
+}
+
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void init(void){
@@ -453,9 +528,9 @@ unsigned int temp=0;
 	// Configure Oscillator to operate the device at 40Mips
 	// Fosc= Fin*M/(N1*N2), Fcy=Fosc/2
 	// Fosc= 10M*40(2*2)=80Mhz for 10M input clock
-	PLLFBD=30; // M=32
-	CLKDIVbits.PLLPOST=0; // N1=2
-	CLKDIVbits.PLLPRE=0; // N2=2
+	PLLFBD=50; // M=32
+	CLKDIVbits.PLLPOST=3; // N1=2
+	CLKDIVbits.PLLPRE=4; // N2=2
 
 	//set up the Peripheral Pin Select Registers
 	//*************************************************************
@@ -497,7 +572,7 @@ unsigned int temp=0;
  	);
 
 	///////////////////port directions (most of the built in peripherals take over, so set those pins to input
-	TRISA=0b1111111111111101;
+	TRISA=0b1111111111111100;
 	TRISB=0b1100001110011111;
 	LATB=0b0000100000000000;
 	///////////////////ADC pin configurations  (if you don't turn the damn thing off, it defaults to taking control of the pins.
@@ -518,8 +593,6 @@ unsigned int temp=0;
 	//ADCValue = ADC1BUF0;  //read the value
 
 	while(OSCCONbits.LOCK!=1) {;};
-
-
 
 
 	//////////////////SPI2  this one is for the led driver!
@@ -549,14 +622,46 @@ unsigned int temp=0;
 
 	T2CONbits.TCS=0;
 	T2CONbits.T32=0;
-	T2CONbits.TCKPS=0b11; //00 
+	T2CONbits.TCKPS=0b11; //00    48828Hz or 20uS per count
 	T2CONbits.TON=1;
 	TMR2 = 0x00; // Clear timer register
 //	PR2 = 196; //was 50000
-	PR2 = 10000;
+	PR2 = 1250;          //39hz?
+
 	IFS0bits.T2IF=0;
 	IEC0bits.T2IE=1;
+
+
+	T4CONbits.TCS=0;
+	T4CONbits.T32=0;
+	T4CONbits.TCKPS=0b01; //00 divide by 8, for 0.64 microseconds per number
+	T4CONbits.TON=1;
+	TMR4 = 0x00; // Clear timer register
+	PR4 = 0xFFFE;
+	IFS1bits.T4IF=0;
+
+	//init servos
+	SERVO0=0;
+	SERVO1=0;
+	SERVO2=0;
+	for(int x=0;x<3;x++){
+	    servos[x].angle=0;
+	    servos[x].center=0;
+	    servos[x].active=0;
+	}
+	servos[0].active=1;
+
+	servos[0].center=CENTER0;
+	servos[1].center=CENTER1;
+	servos[2].center=CENTER2;
+
 	clear_pixels();
+
+	//this didn't work! Oh well!
+	STEPPER1=0;
+	STEPPER2=0;
+	STEPPER3=0;
+	STEPPER4=0;
 
 }
 
