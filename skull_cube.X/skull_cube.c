@@ -79,7 +79,7 @@ typedef struct{
     signed int angle;
     signed int center;
     signed int active;
-    signed int realtimer;
+    unsigned int realtimer;
 } servo;
 
 servo servos[3];
@@ -178,38 +178,61 @@ unsigned char const hotBits[1024] = {
     11, 106, 13, 93
 };
 
-#define MAX 100
+#define MAX 150
 #define MULT 1
 #define DEC 200
 volatile int debounce=0;
 
 void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
+	static int lastmode=2;
+//	static int nextjumpdelay=0;
+//	static int headposition=0;
+	static unsigned int servorandom;
+	static int countdown=0;
+	static unsigned int slower=0;
+
 	static int acc=MAX;
-	static int nextjumpdelay=0;
-	static int headposition=0;
-	//	mode=PASTEL;
-	static int slower=0;
 	if(TILT){acc+=10;if(acc>MAX){acc=MAX;}}
 	if(acc>0){acc-=1;}
 	int cal=MAX-acc;
 	cal/=12;
 	cal+=10;
 
-
-//	while(ZENER==0){
-//		clear_pixels();
-//		pixel[0].b=1;
-//	}
-
 	if(POK_CHG==0){
+	    if(lastmode!=0){countdown=10;}
+	    if(countdown!=0){
+		servos[0].active=1;
+		if((slower%10)==0){
+		    int hold=0;
+		    servos[0].active=1;
+		    servos[0].angle=0;
+		    countdown--;
+		}
+	    }else{servos[0].active=0;}
 	    charge(0);
+	    lastmode=0;
 	}
 
 	if(POK_CHG==1){
+	    lastmode=1;
 	    if(mode==FIRE){
+		servos[0].active=1;
+		if((acc>10)&&((slower%40)==0)){
+		    int hold=0;
+		    servos[0].active=1;
+		    servorandom++;
+		    servorandom%=1023;
+
+		    hold=hotBits[servorandom];
+		    hold*=10;
+		    hold/=14;
+		    hold-=90;
+		    servos[0].angle =hold;
+//		    servos[0].angle =-90;
+		}
 		fire(0,cal,acc*2);
-		moonlight(1,100-acc);
-		moonlight(2,100-acc);
+		moonlight(1,MAX-acc);
+		moonlight(2,MAX-acc);
 		fire(3,cal,acc*2);
 		fire(4,cal,acc*1);
 		fire(5,cal,acc*1);
@@ -237,6 +260,8 @@ void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
 		strobe(7,0xFF,acc*MULT,DEC);
 	    }
 	    if(mode==WHITE){
+		servos[0].active=1;
+		servos[0].angle=0;
 		for(int index=0;index<8;index++){
 		    pixel[index].r=(acc*2)+50;
 		    pixel[index].g=(acc*2)+50;
@@ -251,12 +276,7 @@ void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
 	}
 	IFS0bits.T2IF=0;
 	IEC0bits.T2IE=1;
-//	status_report();
-
-
-	//	slower++;
-//	slower%=100;
-//	if(slower==0){step(1);}
+	slower++;
 }
 
 void spiout2(unsigned char datatosend){
@@ -486,11 +506,11 @@ unsigned int temp=0;
 	spiout2((unsigned char)temp);
 }
 
-#define SERVOMULTIPLY 8 //how many microseconds per degree
-#define SERVOMINIMUM 1562   //1ms
+#define SERVOMULTIPLY 7 //how many microseconds per degree
+#define SERVOMINIMUM 1200   //1ms
 #define SERVOMAXIMUM 3125   //2ms
 #define SERVOOFFSET 781
-
+#define TWEAK 2
 void update_servos(void){
     char index=0;
 
@@ -501,20 +521,23 @@ void update_servos(void){
     if(servos[1].active==1){SERVO1=1;}
     if(servos[2].active==1){SERVO2=1;}
     for(index=0;index<3;index++){
-	int temp=0;
+	signed int temp=0;
 	temp=servos[index].angle;
 	temp*=SERVOMULTIPLY;
 	temp+=SERVOOFFSET;
+	temp+=SERVOMINIMUM;
 	temp+=servos[index].center;
-	servos[index].realtimer=temp;
+	servos[index].realtimer=(unsigned int)temp;
+	servos[index].realtimer/=TWEAK;
+
     }
 
-    while(TMR4<SERVOMINIMUM){;}
+    while(TMR4<SERVOMINIMUM/TWEAK){;}
 
-    while(TMR4<SERVOMAXIMUM){
-        if(servos[0].realtimer<TMR4){SERVO0=0;}
-	if(servos[1].realtimer<TMR4){SERVO1=0;}
-	if(servos[2].realtimer<TMR4){SERVO2=0;}
+    while(TMR4<SERVOMAXIMUM/TWEAK){
+        if((servos[0].realtimer)<TMR4){SERVO0=0;}
+	if((servos[1].realtimer)<TMR4){SERVO1=0;}
+	if((servos[2].realtimer)<TMR4){SERVO2=0;}
     }
 }
 
@@ -645,7 +668,7 @@ unsigned int temp=0;
 	SERVO1=0;
 	SERVO2=0;
 	for(int x=0;x<3;x++){
-	    servos[x].angle=0;
+	    servos[x].angle=50;
 	    servos[x].center=0;
 	    servos[x].active=0;
 	}
