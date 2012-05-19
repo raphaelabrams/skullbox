@@ -202,13 +202,19 @@ void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
 	    if(lastmode!=0){countdown=10;}
 	    if(countdown!=0){
 		servos[0].active=1;
+		servos[1].active=1;
 		if((slower%10)==0){
 		    int hold=0;
 		    servos[0].active=1;
 		    servos[0].angle=0;
+		    servos[1].active=1;
+		    servos[1].angle=0;
 		    countdown--;
 		}
-	    }else{servos[0].active=0;}
+	    }else{
+		servos[0].active=0;
+		servos[1].active=0;
+	    }
 	    charge(0);
 	    lastmode=0;
 	}
@@ -217,18 +223,28 @@ void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
 	    lastmode=1;
 	    if(mode==FIRE){
 		servos[0].active=1;
-		if((acc>10)&&((slower%40)==0)){
+		servos[1].active=1;
+		if((acc>10)&&((slower%7)==0)){
 		    int hold=0;
 		    servos[0].active=1;
 		    servorandom++;
 		    servorandom%=1023;
-
+		    hold=hotBits[servorandom];
+		    hold*=10;
+		    hold/=20;
+		    hold-=60;
+		    servos[0].angle =hold;
+		}
+		if((acc>10)&&((slower%40)==0)){
+		    int hold=0;
+		    servos[1].active=1;
+		    servorandom++;
+		    servorandom%=1023;
 		    hold=hotBits[servorandom];
 		    hold*=10;
 		    hold/=14;
 		    hold-=90;
-		    servos[0].angle =hold;
-//		    servos[0].angle =-90;
+		    servos[1].angle =hold;
 		}
 		fire(0,cal,acc*2);
 		moonlight(1,MAX-acc);
@@ -262,6 +278,8 @@ void __attribute__((interrupt, no_auto_psv)) _T2Interrupt(void){
 	    if(mode==WHITE){
 		servos[0].active=1;
 		servos[0].angle=0;
+		servos[1].active=1;
+		servos[1].angle=0;
 		for(int index=0;index<8;index++){
 		    pixel[index].r=(acc*2)+50;
 		    pixel[index].g=(acc*2)+50;
@@ -673,6 +691,7 @@ unsigned int temp=0;
 	    servos[x].active=0;
 	}
 	servos[0].active=1;
+	servos[1].active=1;
 
 	servos[0].center=CENTER0;
 	servos[1].center=CENTER1;
